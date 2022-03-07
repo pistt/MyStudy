@@ -36,9 +36,39 @@ public:
 };
 
 
-int main(int argc, char const *argv[]){
+class Test {
+public:
+	Test(){cout << "Init...\n";}
+	Test(const Test&) {cout << "Copy\n";}
+	Test(Test&&) {cout << "Move\n";}
+	~Test(){cout << "Destruct...\n";}
+	void doo(){}
+};
 
-	// demo *ptr = new demo;
+void C(Test& mm) {
+	cout << (void*)&mm << endl;
+	mm.doo();
+}
+
+
+void B(Test& mm) {
+	cout << (void*)&mm << endl;
+	mm.doo();
+	C(mm);
+}
+
+void A(Test& mm) {
+	cout << (void*)&mm << endl;
+	mm.doo();
+	B(mm);
+}
+
+
+
+
+int main(int argc, char const *argv[]){
+	auto p = Test();
+	A(p);
 	return 0;
 }
 
