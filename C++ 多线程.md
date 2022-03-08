@@ -186,19 +186,117 @@ void f() {
 
 
 
-### thread 和 this_thread 命名空间
+### thread 类和 this_thread 命名空间
+
+- thread 类中的函数
+
+```c++
+std::thread::hardware_concurrency()	// 返回当前平台最大线程并行数量
+									// 只是参考值，不保证准确。如果不明确，返回0
+std::thread::id()					// 返回当前线程 id
+
+```
+
+- this_thread 命名空间常用函数
+
+```c++
+std::this_thread::get_id()			// 获取当前线程 id
+std::this_thread::sleep_for(dur)	// 阻塞 dur 时间段
+std::this_thread::sleep_until(tp)	// 阻塞直到时间点 tp
+std::this_thread::yield()			// 建议释放控制，让出时间片以便重新调度
+```
+
+## async，future，promise 和 package_task
+
+### async
+
+- async 尝试将其所获得的函数立刻异步启动在一个分离线程中
+- 传递给 async() 的可以是任何的可调用对象：即函数，成员函数，函数对象或 lambda 等，例如`std::async([]{.......})`
+
+- 发射策略
+
+```c++
+std::launch::async;		// 异步马上发射
+std::launch::deferred;	// 推迟直到调用 future.get() 或 future.wait() 才发射
+
+// 用法，需要结合 future 使用
+int f() { return 10; }
+std::future<int> = std::async(std::launch::async, f);
+int my_integer = future.get();
+```
 
 
 
+### future	
+
+> future 只支持 move ，不支持 copy ，get() 返回一个 copy 除非是 future<T&> 形式才返回引用。
+
+​	future 内部保存异步执行返回的结果，或者保存一个异常。当调用 get() 或 wait() 的时候，调用线程会阻塞直到结果返回，当发生了一个异常时，future 会立即就绪并保留这个异常。
+
+- get()：future 内部使用了一个共享状态来存储执行结果。当调用一次 get() 取出结果之后，就不会再有和这个 future 相关联的共享状态了。第二次及之后调用 get() 将会抛出一个异常。在 gcc 上将会是下述这样。
+```text
+terminate called after throwing an instance of 'std::future_error'
+  what():  std::future_error: No associated state
+```
 
 
-## future，promise 和 package_task
+- get()：当运行产生异常时，这个异常也会被存储在 future 的共享状态中，直到调用 get() 时会把异常传播开去（异常传播具体是传值还是引用，不同编译器不同）。同样地，不能多次调用 get 函数。
 
-### future，shared_future
+```c++
+// terminate called after throwing an instance of 'std::bad_alloc'
+//   what():  std::bad_alloc
+// 若不调用 get() 则会正常退出。
+void f() { throw std::bad_alloc(); }
+int main() {
+	std::future<void> ptr = std::async(f);
+	ptr.get();
+    return 0;
+}
+```
+
+- future 相关函数和状态
+
+| 状态                    | 描述                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| future_status::ready    | 共享状态已经就绪，已设置值或异常                             |
+| future_status::timeout  | 已经等待 rel_time，但共享状态未就绪                          |
+| future_status::deferred | 共享状态延迟准备，直到调用 get 或 wait <br>注意 wait_for 和 wait_until 不会导致它开始准备 |
+
+```c++
+future.valid();				// 返回 bool 值，若结果准备完成返回 true 否则 false
+							// 只有 true 时，你才能调用下面的函数
+future.get();				// 获取结果，若结果未完成，会产生阻塞
+future.wait();				// 等待结果，若结果未完成，会产生阻塞
+future.wait_for(dur);
+future.wait_until(tp);
+future.share();				// 返回一个 shared_future 并令当前状态失效
+```
+
+- shared_future
+
+和 future 不同的是，get() 返回的是一个 const reference，并且它支持拷贝语义，**允许多次使用 get()**，而且没有 share 函数。观察内部实现，不难理解，它们为什么表现出不同的行为，shared_future 内部使用 shared_ptr 实现，而 future 使用 unique_ptr 实现。
+
+
 
 ### promise
 
+​	promise 主要用于两个线程之间通信。
+
+
+
 ### package_task
+
+​	把任务封装进去给线程执行。
+
+### call_once
+
+```c++
+std::once_flag oc;					// global flag
+std::call_once(oc, initialize);		// initialize if not initialzed yet
+std::call_once(oc, [] { });
+// 原则上可以使用同一个 once_flag 调用不同的函数。之所以把 once_flag
+// 当作第一实参传给 call_once() 就是为了确保传入的机能只被执行一次
+```
 
 
 
@@ -218,7 +316,13 @@ void f() {
 
 ### lock_guard
 
+​	lock_guard 其实是用 RAII 思想封装了的 mutex 这样子。很容易想到的是，如果上锁的函数执行过程中抛出了一个异常，那么这个异常后面的代码将不会执行，也就是说，后面释放 mutex 的代码不会执行，导致该资源一直被锁住。但是 lock_guard 可以避免这个问题，因为抛出异常后，程序会自动调用相对应代码段变量的析构函数，lock_guard 将在析构函数中释放 mutex.
+
+​	另一个好处是，程序员可以摆脱手动控制锁的烦恼。
+
 ### unique_lock
+
+​	可以到处转移锁的所有权，比如通过函数返回值，通过 move 等等。
 
 
 
@@ -226,15 +330,111 @@ void f() {
 
 ### condition_variable 和 condition_variable_any
 
+`notify_all_at_thread_exit(cv, ul)`
+
+
+
+## 原子类型（请参考《C++并发编程实战》）
+
+### 基本用法
+
+原子类型需要硬件支持，显然，这意味着在不同平台上和不同硬件架构上，会有不同的成本。可以通过`atomic.is_lock_free()`查看内部是否需要使用 lock 实现，否则返回 true，是则返回 false。
+
+- 一般而言，通过原子类型操作获得的一个 copy 而非一个 reference。
+
+- **Default 构造函数，并未完全初始化 atomic 对象，需要显示地用 atomic_init() 初始化**
+
+    ```c++
+    std::atomic<bool> object;
+    std::atomic_init(&object, false);
+        
+    // or init object like this, two ways have the same effect
+    std::atomic<bool> object(false); // thii is not an atomic operaiton
+    ```
+
+- 接受相关类型值的那个构造函数并不是 atomic 的
+
+- 所有函数除了构造函数，都被重载为 volatile 和 non-volatile 两个版本
+
+- 常用的函数
+
+    ```c++
+    atomic.is_lock_free();
+    atomic.store(val);
+    atomic.load();
+    atomic.exchange(val);
+    atomic.compare_exchange_strong(exp, des);	// 请见官方文档
+    atomic.compare_exchange_weak(exp, des);		// 请见官方文档
+    atomic.operator atomic();					// 返回一个该类型的拷贝
+    ```
+
+    
+
+
+
+### 原子类型高级用法
+
+​	在使用原子类型的低级接口时，你应该确保自己了解你在干什么，并且了解内存顺序模型。并且你应该明白，在不同 CPU 架构上，这些模型依然有着不同的实现和成本。帮助你了解内存顺序的是，了解 CPU 的**指令重排**乃至编译器的**语句重排**，以及**内存屏障**。一般而言，底层通过利用 CPU 的 CAS(Compare and Swap) 指令实现缓存锁和总线锁，从而实现多处理器间的原子操作。
+
+<img src = ".\images\CAS.png" alt="RVO实验结果2" style = "zoom:75%" align="left">
+
+
+
+- 内存顺序
+
+| 内存顺序模型名称 | 英文名              | c++对应                                                      |
+| ---------------- | ------------------- | ------------------------------------------------------------ |
+| 顺序一致顺序     | sequence consistent | memory_order_seq_cst                                         |
+| 获得--释放顺序   | acquire-release     | memory_order_consume<br>memory_order_acquire<br>memory_order_release<br>memory_order_acq_rel |
+| 松散顺序         | relaxed             | memory_order_relaxed                                         |
+
+
+
+- 可供使用的常用函数——具体使用方法和效果，请参考官方文档和书籍
+
+```c++
+atomic.load(val, memory_order);
+atomic.store(memory_order);
+atomic.exchange(val, memory_order);
+atomic.compare_exchange_strong(exp, des, mo);	// 还有另一个版本
+atomic.compare_exchange_weak(exp, des, mo);    	// 还有另一个版本
+```
+
 
 
 
 
 ## 时钟
 
+有时间限制的等待。下面是一些接受超时的函数
+
+> dur: duration
+>
+> tp: time_point
+>
+> pre: predicate
+
+| 类/命名空间                                       | 函数                                                    | 返回值                                                       |
+| ------------------------------------------------- | :------------------------------------------------------ | ------------------------------------------------------------ |
+| this_thread 空间                                  | sleep_for(dur)<br>sleep_until(tp)                       | 不可用                                                       |
+| condition_variable<br>condition_variable_any      | wait_for(lock, dur)<br>wait_until(lock, tp)             | std::cv_status::timeout<br>std::cv_status::no_timeout        |
+|                                                   | wait_for(lock, dur, pre)<br>wait_until(lock, tp, pre)   | bool                                                         |
+| mutex<br>recursice_timed_mutex                    | try_lock_for(dur)<br>try_lock_until(tp)                 | bool                                                         |
+| unique_lock\<TimeLockable\>                       | unique_lock(lockable, dur)<br>unique_lock(lockable, tp) | 不可用--owns_lock()在新<br>构造对象上；如果获得了<br>锁返回 true， 否则false |
+|                                                   | try_lock_for(dur)<br>try_lock_until(tp)                 | bool                                                         |
+| future\<ValueType\><br>shared_future\<ValueType\> | wait_for(dur)<br>wait_until(tp)                         | future_status::timeout<br>future_status::ready<br>future_status::deferred |
+
+
+
 ### std::chrono
 
+## 注意事项
 
+### 线程假醒(spurious wakeup)
+
+有两种说法，一种是 notify 引起的竞争，一种是系统实现问题，如系统错误返回的 EINTR 信号。解决线程假醒的方法，是把 if 判断改成 while 循环，让线程在醒来时再次判断条件。c++ 使用条件 wait 也可以`condition_variable.wait(lock, lambda_function)`
+
+参考链接：[维基百科](https://en.m.wikipedia.org/wiki/Spurious_wakeup)，[知乎](https://www.zhihu.com/question/271521213)，[简书](https://www.jianshu.com/p/0eff666a4875)，[某博客](http://www.manongjc.com/detail/15-skvyvcwcmkgurum.html)
 
 
 
