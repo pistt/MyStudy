@@ -5,6 +5,24 @@ using namespace std;
 template<class T>
 class TD;
 
+/* 
+	基于文法规则实现的算术表达式，由于文法很简单，所以不再赘述关于
+	提取左公因子，消除左递归，first 集合，follow 集合等 LL(1)
+	需要解决的问题。直接给出文法
+		
+	普通形式：
+	Exp 	-> Term + Exp | Term - Exp | Term
+	Term 	-> Fac * Term | Fac / Term | Fac
+	Fac		-> (Exp) | number
+
+	扩展 EBNF：
+	Exp 	-> Term { ( + | - ) Term }
+	Term	-> Fac { ( * | / ) Fac }
+	Fac		-> (Exp) | number
+*/
+
+
+
 
 enum addop { plus = '+', minus = '-'};
 enum mulop { multi = '*', divide = '/'};
