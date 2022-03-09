@@ -308,9 +308,45 @@ std::call_once(oc, [] { });
 
 ## 锁
 
+共有的
+
+```c++
+lock(m1, m2);		// 锁住 m1, m2 
+try_lock();			// 可能假失败，由于内存次序原因
+```
+
+
+
 ### mutex
 
-**只能在同一个线程中，调用 lock 和 unlock，否则是 UB**
+> 更多详情可参考：https://blog.csdn.net/faihung/article/details/88411839
+
+**调用 unlock 的线程必须拥有锁，否则是 UB**
+
+###  shared_mutex(Since C++14)
+
+> https://blog.csdn.net/princeteng/article/details/103952888
+
+​	shared_mutex 类是一个同步原语，可用于保护共享数据不被多个线程同时访问。与便于独占访问的其他互斥类型不同，**shared_mutex 拥有 2 个访问级别：共享 - 多个线程能共享同一互斥的所有权；独占性 - 仅一个线程能占有互斥。**
+
+- 若一个线程已经通过**lock或try_lock获取独占锁（写锁）**，则无其他线程能获取该锁（包括共享的）。尝试获得读锁的线程也会被阻塞。
+- **仅当任何线程均未获取独占性锁时，共享锁（读锁）才能被多个线程获取（通过 lock_shared 、try_lock_shared ）**。
+- 在一个线程内，同一时刻只能获取一个锁（共享或独占性）。
+
+　　成员函数主要包含两大类：排他性锁定（写锁）和共享锁定（读锁）。
+
+```c++
+lock();			// 排他性锁
+try_lock();		// 排他性锁
+unlock();		// 解除互斥
+
+// -------------------
+lock_shared();	// 共享性锁，若互斥，则阻塞
+try_lock_shared();//同上
+unlock_shared();// 解锁互斥
+```
+
+
 
 ### recursive_mutex
 
@@ -322,7 +358,35 @@ std::call_once(oc, [] { });
 
 ### unique_lock
 
-​	可以到处转移锁的所有权，比如通过函数返回值，通过 move 等等。
+​	对于 unique_lock 的对象来说，一个对象只能和一个 mutex 锁唯一对应，不能存在一对多或者多对一的情况，不然会造成死锁的出现。所以如果想要传递两个 unique_lock 对象对 mutex 的权限，需要运用到移动语义或者移动构造函数两种方法。
+
+
+
+```c++
+// Constructors
+std::unique_lock<mutex> lock(mutex);
+std::unique_lock<mutex> lock(mutex, tp);
+std::unique_lock<mutex> lock(mutex, dur);
+std::unique_lock<mutex> lock(mutex, std::defer_lock);
+
+//假定当前线程已经获得互斥对象的所有权，所以不再请求锁
+std::unique_lock<mutex> lock(mutex, std::adopt_lock);
+std::unique_lock<mutex> lock(mutex, std::try_lock);
+
+// Functions
+swap(l1, l2);
+release();			// release mutex and returns a pointer pointed to the mutex
+owns_lock();		// if unique_owns it lock, return true
+mutex();			// returns a pointer pointed to the mutex
+if (unique_lock);	// 检查是否被锁定
+lock();
+try_lock();
+try_lock_for(dur);
+try_lock_until(tp);
+unlock();
+```
+
+
 
 
 
@@ -331,6 +395,28 @@ std::call_once(oc, [] { });
 ### condition_variable 和 condition_variable_any
 
 `notify_all_at_thread_exit(cv, ul)`
+
+
+
+## 信号量 semaphore.h
+
+```c++
+/*
+	__pshared 如果为0，只能该进程使用；否则进程间共享
+	__value 初始信号量的值
+	返回值：成功返回 0，否则返回 -1
+	如无特殊说明，下面函数都是成功返回 0，失败返回 -1
+*/
+int sem_init(sem_t *__sem, int __pshared, unsigned int __value);
+// 当前信号量的值，保存在 sval 中。若有 >=1 个线程在等待，返回等待的线程数量
+int sem_getvalue(sem_t *sem, int *sval);
+int sem_post(sem_t *sem);
+int sem_wait(sem_t *sem); 
+int sem_trywait(sem_t *sem);
+int sem_destroy(sem_t *sem);
+```
+
+​	如果*pshared*不为零，则信号量在进程之间共享，并且应该位于共享内存的区域中（参见 ***[shm_open](https://linux.die.net/man/3/shm_open)** (3)*、***[mmap](https://linux.die.net/man/2/mmap)** (2)*和***[shmget](https://linux.die.net/man/2/shmget)** (2)*）。（由于***[fork](https://linux.die.net/man/2/fork)** (2)*创建的子进程继承了其父进程的内存映射，它也可以访问信号量。）任何可以访问共享内存区域的进程都可以使用***[sem_post](https://linux.die.net/man/3/sem_post)** (3)*、 ***[sem_wait](https://linux.die.net/man/3/sem_wait)** (3)*等对信号量进行操作.
 
 
 
