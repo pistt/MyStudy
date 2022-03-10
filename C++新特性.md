@@ -123,6 +123,12 @@ constexpr Point mid = midPoint(p1, p2);
 
 ### Template Meta Programming
 
+> 关于模板元的诞生，应用，讨论可以参考下述文章：知乎还有很多黑魔法 
+>
+> 腾讯云：https://cloud.tencent.com/developer/article/1347878
+>
+> 知乎：https://www.zhihu.com/question/21656266?sort=created
+
 - 从 C++11 之后，引入了模板元编程。我们可以把许多运行期的事情，提早到编译期完成。详细运用可以参考 type_traits 库
 - 最核心的用法在于 **SFINAE(Substitution Failure Is Not An Error)**，翻译是模板推断失败不是一个错误。因此我们可以特化或者偏特化某些模板，让某些模板在一定条件下推断成功可以用，某些模板在一定条件下推断失败不能用。从而达到自动选用匹配模板的效果。
 
