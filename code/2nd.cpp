@@ -1,19 +1,43 @@
 /*
     模拟 LRU 是吧
 */
-#include <bits/stdc++.h>
+#include "mybits/stdc++.h"
 #include <Windows.h>
 using namespace std;
 
-class Solution {
+template <typename T> class TD;
+#define INFO(x) TD<decltype(x)> x##x##x;
+
+class Event { };
+using EventCallBackFn = std::function<void(Event&)>;
+
+class Test : public Event {
 public:
-    int trap(vector<int>& height) {
-    	return 1;
-    }
+	struct Wdata;
+	void init() { 
+		Wdata data;
+
+		Event tmp;
+		data.EventCallBack(tmp);
+	}
+
+	struct Wdata {
+		int ccctypes;
+		EventCallBackFn EventCallBack;
+	};
+
+	Wdata m_data;
 };
+
+// https://blog.csdn.net/alexhu2010q/category_10165311.html
+
 
 
 int main(){
+	{
+
+	}
+	 
 
 
     return 0;
