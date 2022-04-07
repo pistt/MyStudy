@@ -675,7 +675,7 @@ void print(T arg) { cout << arg << endl; }
 // 利用 初始化列表 和 逗号表达式 进行包展开
 template<typename... T>
 void expand(T... args) {
-    auto q = {(print(arg), false)...};
+    auto q = {(print(args), false)...};
     // 注意 q 是 std::initializer_list 类型哦
     // 实际上也可以这样写
     // bool q[] = {(print(arg), 0)...};
